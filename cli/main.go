@@ -2,58 +2,61 @@ package main
 
 import (
 	"bufio"
-	"encoding/json"
 	"log"
 	"os"
+	"os/exec"
+	"strconv"
 	"strings"
+	"syscall"
 )
 
-type processDefinition struct {
-	Name      string   `json:"name"`      // "name": "my-api",
-	Cmd       string   `json:"cmd"`       // "cmd": "./my-api",
-	Args      []string `json:"args"`      // "args": ["--port", "8080"],
-	Cwd       string   `json:"cwd"`       // "cwd": "/home/user/projects/my-api",
-	Instances int      `json:"instances"` // "instances": 2,
-}
-
-func get(path string) (*processDefinition, error) {
-	file, err := os.Open(path)
+func parseStartDeamonCommand(input string) (int, error) {
+	process := exec.Command(input)
+	err := process.Start()
 	if err != nil {
-		return nil, err
-	}
-	defer file.Close()
-
-	reader := file
-	decoder := json.NewDecoder(reader)
-
-	var p processDefinition
-	decoderErr := decoder.Decode(&p)
-	if decoderErr != nil {
-		return nil, decoderErr
+		return 0, err
 	}
 
-	return &p, nil
+	return process.Process.Pid, nil
 }
 
-func parseStartCommand(parsedInput []string) {
-	if len(parsedInput) < 3 {
-		log.Printf("Invalid start command\n")
-	}
-
-	path := parsedInput[2]
-	pd, err := get(path)
+func parseStopDeamonCommand(input string) error {
+	pid, err := strconv.Atoi(input)
 	if err != nil {
-		log.Print(err)
+		return err
 	}
 
-	// print(pd.Name)
+	process, err := os.FindProcess(pid)
+	if err != nil {
+		return err
+	}
+
+	defer process.Release()
+
+	err = process.Signal(syscall.SIGKILL)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
+
+// func parseStartCommand(parsedInput []string) {
+// 	if len(parsedInput) < 3 {
+// 		log.Printf("Invalid start command\n")
+// 	}
+
+// 	path := parsedInput[2]
+
+// 	// send command to deamon
+// }
 
 func main() {
 	// while
 	// read io
 	// parse with err check
 	// switch with all of the commands
+	// sends commands to deamon
 
 	scanner := bufio.NewScanner(os.Stdin)
 	for scanner.Scan() {
@@ -67,9 +70,29 @@ func main() {
 
 		command := strings.ToLower(parsedInput[1])
 		switch command {
-		case "start":
-			parseStartCommand(parsedInput)
+		case "start-deamon":
+			if len(parsedInput) < 3 {
+				log.Printf("Invalid start-deamon command\n")
+				break
+			}
+
+			pid, err := parseStartDeamonCommand(parsedInput[2])
+			if err != nil {
+				log.Print(err)
+			}
+
+			log.Printf("%s", "Started deamon with "+strconv.Itoa(pid)+" pid.\n")
 			break
+		case "stop-deamon":
+			err := parseStopDeamonCommand(parsedInput[2])
+			if err != nil {
+				log.Print(err)
+			}
+		case "start":
+			log.Printf("%s", "Command "+command+" unsupported.\n")
+			break
+			// parseStartCommand(parsedInput)
+			// break
 		case "stop":
 			log.Printf("%s", "Command "+command+" unsupported.\n")
 			break
