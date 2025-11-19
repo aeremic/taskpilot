@@ -2,25 +2,102 @@ package main
 
 import (
 	"bufio"
+	"fmt"
 	"log"
+	"net"
 	"os"
 	"os/exec"
 	"strconv"
 	"strings"
 	"syscall"
+
+	common "common"
 )
 
-func parseStartDeamonCommand(input string) (int, error) {
+type CustomError struct {
+	Message string
+}
+
+func (c CustomError) Error() string {
+	return fmt.Sprintf("%s", c.Message)
+}
+
+type deamonConfig struct {
+	Path string `json:"path"`
+}
+
+var conn net.Conn = nil
+
+func connect() bool {
+	if conn == nil {
+		var err error
+
+		conn, err = net.Dial("unix", "/tmp/echo.sock")
+		if err != nil {
+			log.Print(err)
+			return false
+		}
+
+		return true
+	}
+
+	return false
+}
+
+func disconnect() bool {
+	if conn != nil {
+		conn.Close()
+		conn = nil
+
+		return true
+	}
+
+	return false
+}
+
+func write(msg string) error {
+	if conn != nil {
+		_, err := conn.Write([]byte(msg))
+		if err != nil {
+			return err
+		}
+
+		return nil
+	}
+
+	return CustomError{Message: "Unable to write. Connection not established."}
+}
+
+func read() (string, error) {
+	if conn != nil {
+		buf := make([]byte, 512)
+		n, err := conn.Read(buf[:])
+		if err != nil {
+			return "", err
+		}
+
+		data := string(buf[0:n])
+		return data, nil
+	}
+
+	return "", CustomError{Message: "Unable to read. Connection not established."}
+}
+
+func processStartDeamonCommand(input string) (int, error) {
+	// TODO: prevent starting deamon multiple times by saving deamon state
+
 	process := exec.Command(input)
 	err := process.Start()
 	if err != nil {
-		return 0, err
+		return -1, err
 	}
 
 	return process.Process.Pid, nil
 }
 
-func parseStopDeamonCommand(input string) error {
+func processStopDeamonCommand(input string) error {
+	disconnect()
+
 	pid, err := strconv.Atoi(input)
 	if err != nil {
 		return err
@@ -41,23 +118,43 @@ func parseStopDeamonCommand(input string) error {
 	return nil
 }
 
-// func parseStartCommand(parsedInput []string) {
-// 	if len(parsedInput) < 3 {
-// 		log.Printf("Invalid start command\n")
-// 	}
+func processStartCommand(parsedInput []string) error {
+	connect()
 
-// 	path := parsedInput[2]
+	err := write(parsedInput[1] + " " + parsedInput[2])
+	if err != nil {
+		return err
+	}
 
-// 	// send command to deamon
-// }
+	data, err := read()
+	if err != nil {
+		return err
+	}
+
+	log.Print(data)
+
+	return nil
+}
+
+func processStopCommand(parsedInput []string) error {
+	connect()
+
+	err := write(parsedInput[1] + " " + parsedInput[2])
+	if err != nil {
+		return err
+	}
+
+	data, err := read()
+	if err != nil {
+		return err
+	}
+
+	log.Print(data)
+
+	return nil
+}
 
 func main() {
-	// while
-	// read io
-	// parse with err check
-	// switch with all of the commands
-	// sends commands to deamon
-
 	scanner := bufio.NewScanner(os.Stdin)
 	for scanner.Scan() {
 		input := scanner.Text()
@@ -76,25 +173,57 @@ func main() {
 				break
 			}
 
-			pid, err := parseStartDeamonCommand(parsedInput[2])
+			json, err := common.GetAndDecodeJsonFile[deamonConfig](parsedInput[2])
 			if err != nil {
 				log.Print(err)
+				break
+			}
+
+			pid, err := processStartDeamonCommand(json.Path)
+			if err != nil {
+				log.Print(err)
+				break
 			}
 
 			log.Printf("%s", "Started deamon with "+strconv.Itoa(pid)+" pid.\n")
 			break
 		case "stop-deamon":
-			err := parseStopDeamonCommand(parsedInput[2])
+			if len(parsedInput) < 3 {
+				log.Printf("Invalid stop-deamon command\n")
+				break
+			}
+
+			err := processStopDeamonCommand(parsedInput[2])
 			if err != nil {
 				log.Print(err)
+				break
 			}
-		case "start":
-			log.Printf("%s", "Command "+command+" unsupported.\n")
+
+			log.Print("Stopped.")
 			break
-			// parseStartCommand(parsedInput)
-			// break
+		case "start":
+			if len(parsedInput) < 3 {
+				log.Printf("Invalid start command\n")
+			}
+
+			err := processStartCommand(parsedInput)
+			if err != nil {
+				log.Print(err)
+				break
+			}
+
+			break
 		case "stop":
-			log.Printf("%s", "Command "+command+" unsupported.\n")
+			if len(parsedInput) < 3 {
+				log.Printf("Invalid stop command\n")
+			}
+
+			err := processStopCommand(parsedInput)
+			if err != nil {
+				log.Print(err)
+				break
+			}
+
 			break
 		case "restart":
 			log.Printf("%s", "Command "+command+" unsupported.\n")

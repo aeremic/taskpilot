@@ -1,3 +1,7 @@
 module cli
 
 go 1.25.4
+
+require common v0.0.0
+
+replace common => ../common
