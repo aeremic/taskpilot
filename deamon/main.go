@@ -1,9 +1,12 @@
 package main
 
 import (
+	"common"
 	"log"
 	"net"
 	"os"
+	"os/exec"
+	"strings"
 )
 
 type processDefinition struct {
@@ -14,20 +17,63 @@ type processDefinition struct {
 	Instances int      `json:"instances"` // "instances": 2,
 }
 
+func write(conn net.Conn, msg string) {
+	_, err := conn.Write([]byte(msg))
+	if err != nil {
+		log.Print(err)
+	}
+}
+
 func handleConnection(conn net.Conn) {
 	for {
+		var err error
+
 		buf := make([]byte, 512)
 		n, err := conn.Read(buf)
 		if err != nil {
-			log.Fatal(err)
+			log.Print(err)
 		}
 
-		data := buf[0:n]
-		dataAsString := string(data) + " from server"
+		msg := strings.Fields(strings.TrimSpace(string(buf[0:n])))
+		if len(msg) < 1 {
+			write(conn, "Invalid command")
+		}
 
-		_, err = conn.Write([]byte(dataAsString))
-		if err != nil {
-			log.Fatal(err)
+		command := msg[0]
+
+		switch command {
+		case "start":
+			// TODO: After starting process save it's state in the db
+			if len(msg) < 2 {
+				write(conn, "Invalid start command")
+			}
+
+			pdPath := msg[1]
+
+			pd, err := common.GetAndDecodeJsonFile[processDefinition](pdPath)
+			process := exec.Command(pd.Cmd, pd.Args...)
+			err = process.Start()
+			if err != nil {
+				write(conn, err.Error())
+			}
+
+			_, err = conn.Write([]byte("Process " + pd.Name + " started."))
+			if err != nil {
+				write(conn, err.Error())
+			}
+			break
+		case "stop":
+			// TODO: Find running processes in the table and get their pids. Then stop them with sigkill. Here it might happen that process is already killed/not existant. Return msg then
+			// TODO: There can be multiple processes by name since multiple processes can be runned so it needs to stop them all
+			break
+		case "restart":
+			// TODO: Find running processes in the table. Sigkill then run them again them if they exist.
+			// TODO: Here it might happen that restarting process is already killed/not existant. Only start then but return msg
+		case "list":
+			// TODO: Query all running processes from the table. Consider joining db state with running state since db state might be out of sync. Look into syncing states
+			break
+		default:
+			write(conn, "Unsupported "+command+" command")
 		}
 	}
 }
@@ -36,10 +82,12 @@ func main() {
 	socketPath := "/tmp/echo.sock"
 	os.Remove(socketPath)
 
-	l, err := net.Listen("unix", "/tmp/echo.sock")
+	l, err := net.Listen("unix", socketPath)
 	if err != nil {
 		log.Fatal("Listen error: ", err)
 	}
+
+	// TODO: Query processes from the table and run them again if they are not running
 
 	for {
 		conn, err := l.Accept()

@@ -22,8 +22,8 @@ func (c CustomError) Error() string {
 	return fmt.Sprintf("%s", c.Message)
 }
 
-type deamonConfig struct {
-	Path string `json:"path"`
+type CliConfig struct {
+	DeamonPath string `json:"deamon-path"`
 }
 
 var conn net.Conn = nil
@@ -99,23 +99,7 @@ func processStopDeamonCommand(input string) error {
 	return nil
 }
 
-func processStartCommand(parsedInput []string) error {
-	err := write(parsedInput[1] + " " + parsedInput[2])
-	if err != nil {
-		return err
-	}
-
-	data, err := read()
-	if err != nil {
-		return err
-	}
-
-	log.Print(data)
-
-	return nil
-}
-
-func processStopCommand(parsedInput []string) error {
+func processDeamonCommand(parsedInput []string) error {
 	err := write(parsedInput[1] + " " + parsedInput[2])
 	if err != nil {
 		return err
@@ -150,13 +134,13 @@ func main() {
 				break
 			}
 
-			json, err := common.GetAndDecodeJsonFile[deamonConfig](parsedInput[2])
+			json, err := common.GetAndDecodeJsonFile[CliConfig](parsedInput[2])
 			if err != nil {
 				log.Print(err)
 				break
 			}
 
-			pid, err := processStartDeamonCommand(json.Path)
+			pid, err := processStartDeamonCommand(json.DeamonPath)
 			if err != nil {
 				log.Print(err)
 				break
@@ -183,26 +167,13 @@ func main() {
 
 			log.Print("Stopped.")
 			break
-		case "start":
+		case "start", "stop":
 			if len(parsedInput) < 3 {
-				log.Printf("Invalid start command\n")
+				log.Printf("Invalid deamon command\n")
 			}
 
 			dial()
-			err := processStartCommand(parsedInput)
-			if err != nil {
-				log.Print(err)
-				break
-			}
-
-			break
-		case "stop":
-			if len(parsedInput) < 3 {
-				log.Printf("Invalid stop command\n")
-			}
-
-			dial()
-			err := processStopCommand(parsedInput)
+			err := processDeamonCommand(parsedInput)
 			if err != nil {
 				log.Print(err)
 				break
