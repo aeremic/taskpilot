@@ -1,0 +1,20 @@
+{
+  "name": "my-api",
+  "cmd": "./my-api",
+  "args": ["--port", "8080"],
+  "cwd": "/home/user/projects/my-api",
+  "instances": 2,
+  "env": {
+    "ENV": "production",
+    "DB_URL": "postgres://localhost/db"
+  },
+  "restart_policy": {
+    "type": "always",
+    "max_restarts": 10,
+    "interval": "30s"
+  },
+  "logs": {
+    "out": "/var/log/my-api/out.log",
+    "err": "/var/log/my-api/err.log"
+  }
+}

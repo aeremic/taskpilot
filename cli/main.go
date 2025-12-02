@@ -28,31 +28,15 @@ type deamonConfig struct {
 
 var conn net.Conn = nil
 
-func connect() bool {
+func dial() {
 	if conn == nil {
 		var err error
 
 		conn, err = net.Dial("unix", "/tmp/echo.sock")
 		if err != nil {
 			log.Print(err)
-			return false
 		}
-
-		return true
 	}
-
-	return false
-}
-
-func disconnect() bool {
-	if conn != nil {
-		conn.Close()
-		conn = nil
-
-		return true
-	}
-
-	return false
 }
 
 func write(msg string) error {
@@ -85,7 +69,6 @@ func read() (string, error) {
 
 func processStartDeamonCommand(input string) (int, error) {
 	// TODO: prevent starting deamon multiple times by saving deamon state
-
 	process := exec.Command(input)
 	err := process.Start()
 	if err != nil {
@@ -96,8 +79,6 @@ func processStartDeamonCommand(input string) (int, error) {
 }
 
 func processStopDeamonCommand(input string) error {
-	disconnect()
-
 	pid, err := strconv.Atoi(input)
 	if err != nil {
 		return err
@@ -119,8 +100,6 @@ func processStopDeamonCommand(input string) error {
 }
 
 func processStartCommand(parsedInput []string) error {
-	connect()
-
 	err := write(parsedInput[1] + " " + parsedInput[2])
 	if err != nil {
 		return err
@@ -137,8 +116,6 @@ func processStartCommand(parsedInput []string) error {
 }
 
 func processStopCommand(parsedInput []string) error {
-	connect()
-
 	err := write(parsedInput[1] + " " + parsedInput[2])
 	if err != nil {
 		return err
@@ -199,6 +176,11 @@ func main() {
 				break
 			}
 
+			if conn != nil {
+				conn.Close()
+				conn = nil
+			}
+
 			log.Print("Stopped.")
 			break
 		case "start":
@@ -206,6 +188,7 @@ func main() {
 				log.Printf("Invalid start command\n")
 			}
 
+			dial()
 			err := processStartCommand(parsedInput)
 			if err != nil {
 				log.Print(err)
@@ -218,6 +201,7 @@ func main() {
 				log.Printf("Invalid stop command\n")
 			}
 
+			dial()
 			err := processStopCommand(parsedInput)
 			if err != nil {
 				log.Print(err)

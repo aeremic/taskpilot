@@ -1,8 +1,8 @@
 package main
 
 import (
-	"encoding/json"
 	"log"
+	"net"
 	"os"
 )
 
@@ -14,27 +14,39 @@ type processDefinition struct {
 	Instances int      `json:"instances"` // "instances": 2,
 }
 
-func get(path string) (*processDefinition, error) {
-	file, err := os.Open(path)
-	if err != nil {
-		return nil, err
+func handleConnection(conn net.Conn) {
+	for {
+		buf := make([]byte, 512)
+		n, err := conn.Read(buf)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		data := buf[0:n]
+		dataAsString := string(data) + " from server"
+
+		_, err = conn.Write([]byte(dataAsString))
+		if err != nil {
+			log.Fatal(err)
+		}
 	}
-	defer file.Close()
-
-	reader := file
-	decoder := json.NewDecoder(reader)
-
-	var p processDefinition
-	decoderErr := decoder.Decode(&p)
-	if decoderErr != nil {
-		return nil, decoderErr
-	}
-
-	return &p, nil
 }
 
 func main() {
+	socketPath := "/tmp/echo.sock"
+	os.Remove(socketPath)
+
+	l, err := net.Listen("unix", "/tmp/echo.sock")
+	if err != nil {
+		log.Fatal("Listen error: ", err)
+	}
+
 	for {
-		log.Print("Deamon started")
+		conn, err := l.Accept()
+		if err != nil {
+			log.Fatal("Accept error: ", err)
+		}
+
+		go handleConnection(conn)
 	}
 }
