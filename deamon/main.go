@@ -2,6 +2,7 @@ package main
 
 import (
 	"common"
+	"database/sql"
 	"log"
 	"net"
 	"os"
@@ -24,7 +25,7 @@ func write(conn net.Conn, msg string) {
 	}
 }
 
-func handleConnection(conn net.Conn) {
+func handleConnection(conn net.Conn, db *sql.DB) {
 	for {
 		var err error
 
@@ -55,6 +56,16 @@ func handleConnection(conn net.Conn) {
 			err = process.Start()
 			if err != nil {
 				write(conn, err.Error())
+				break
+			}
+
+			// TODO: Get pid of process
+			// TODO: add pid to the process table
+			q := "INSERT INTO process(pid, name, cmd, args, cwd, instances) values(?, ?, ?, ?, ?, ?)"
+			_, err = db.Exec(q, -1, pd.Name, pd.Cmd, pd.Args, pd.Cwd, pd.Instances)
+			if err != nil {
+				write(conn, err.Error())
+				break
 			}
 
 			_, err = conn.Write([]byte("Process " + pd.Name + " started."))
@@ -87,7 +98,23 @@ func main() {
 		log.Fatal("Listen error: ", err)
 	}
 
-	// TODO: Query processes from the table and run them again if they are not running
+	db, err := sql.Open("sqlite", "./storage.db")
+	if err != nil {
+		log.Fatal("Database error: ", err)
+	}
+	defer db.Close()
+
+	// TODO: Query processes from the table and run them again if they are not running. Look into syncing states
+	var processesFromDb []processDefinition
+	err = db.QueryRow("SELECT * FROM PROCESS;").Scan(&processesFromDb)
+	if err != nil {
+		log.Fatal("Error on database read: ", err)
+	}
+
+	for _, pd := range processesFromDb {
+		process := exec.Command(pd.Cmd, pd.Args...)
+		err = process.Start()
+	}
 
 	for {
 		conn, err := l.Accept()
@@ -95,6 +122,6 @@ func main() {
 			log.Fatal("Accept error: ", err)
 		}
 
-		go handleConnection(conn)
+		go handleConnection(conn, db)
 	}
 }
