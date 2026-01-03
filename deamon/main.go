@@ -44,7 +44,6 @@ func handleConnection(conn net.Conn, db *sql.DB) {
 
 		switch command {
 		case "start":
-			// TODO: After starting process save it's state in the db
 			if len(msg) < 2 {
 				write(conn, "Invalid start command")
 			}
@@ -59,10 +58,8 @@ func handleConnection(conn net.Conn, db *sql.DB) {
 				break
 			}
 
-			// TODO: Get pid of process
-			// TODO: add pid to the process table
 			q := "INSERT INTO process(pid, name, cmd, args, cwd, instances) values(?, ?, ?, ?, ?, ?)"
-			_, err = db.Exec(q, -1, pd.Name, pd.Cmd, pd.Args, pd.Cwd, pd.Instances)
+			_, err = db.Exec(q, process.Process.Pid, pd.Name, pd.Cmd, pd.Args, pd.Cwd, pd.Instances)
 			if err != nil {
 				write(conn, err.Error())
 				break
@@ -70,7 +67,7 @@ func handleConnection(conn net.Conn, db *sql.DB) {
 
 			_, err = conn.Write([]byte("Process " + pd.Name + " started."))
 			if err != nil {
-				write(conn, err.Error())
+				log.Fatal("Error on writing message. ", err)
 			}
 			break
 		case "stop":
@@ -104,7 +101,7 @@ func main() {
 	}
 	defer db.Close()
 
-	// TODO: Query processes from the table and run them again if they are not running. Look into syncing states
+	// TODO: Query processes from the table and run them again if they are not running. Look into syncing states. Rerun ones that are in db but not in sys state
 	var processesFromDb []processDefinition
 	err = db.QueryRow("SELECT * FROM PROCESS;").Scan(&processesFromDb)
 	if err != nil {
